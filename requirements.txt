@@ -1,0 +1,2 @@
+# tools/logs_insights.py and scripts/deploy.py / scripts/cleanup.py depend on boto3 only.
+boto3>=1.34
