@@ -15,7 +15,7 @@ model: sonnet
 
 ## Core Principles
 
-- MUST: `../tools/logs_insights.py` の `run_logs_insights_query()` を呼び出し、スパンから `latency_ms` (または `duration`) を対象にクエリを実行すること。呼び出しはコマンド実行ツールで `python3 ../tools/logs_insights.py --log-group <対象> --query '<クエリ>' --minutes <分> --limit 20` の形、または同モジュールを import して `run_logs_insights_query()` を直接呼ぶ短い Python スニペットのいずれかで行う
+- MUST: `../tools/logs_insights.py` の `run_logs_insights_query()` を呼び出し、`spans` ログストリームに絞り込んだうえで `latency_ms` (または `duration`) を対象にクエリを実行すること。対象ログ グループは `/aws/bedrock-agentcore/runtimes/<agent_id>-<endpoint_name>` の 1 つであり、`query_string` に `@logStream like /^spans/` を含めてスパンだけに絞り込む (`runtime-logs` ストリームには `latency_ms`/`duration` が含まれない)。呼び出しはコマンド実行ツールで `python3 ../tools/logs_insights.py --log-group <対象> --query '<クエリ>' --minutes <分> --limit 20` の形、または同モジュールを import して `run_logs_insights_query()` を直接呼ぶ短い Python スニペットのいずれかで行う
 - MUST: `query_string` には必ず `| limit` を含めること (20 を推奨)
 - MUST: 結果を `../tools/span_filter.py` の `filter_spans()` に渡し、`kept_records` だけを以後の要約対象にすること
 - MUST: `record_count` / `representative_records` / `field_value_counts` を、指定された出力先パスに JSON で保存すること

@@ -39,10 +39,14 @@ Sub-agent が担うステップには `(subagent)` と明記する。ユーザ�
 
 main agent が対話し、以下を確定する。
 
-- ログ グループ名。分からない場合は次の 3 パターンを提示し、どれを使うか確認する。
-  - `/aws/bedrock-agentcore/runtimes/<agent_id>-<endpoint_name>/otel-rt-logs` (構造化 OTEL スパン専用)
-  - `/aws/bedrock-agentcore/runtimes/<agent_id>-<endpoint_name>/[runtime-logs]` (stdout/stderr)
-  - `/aws/bedrock-agentcore/runtimes/<agent_id>-<endpoint_name>-DEFAULT` (単一結合ログ グループ)
+- ログ グループ名。AgentCore Runtime のログ グループは
+  `/aws/bedrock-agentcore/runtimes/<agent_id>-<endpoint_name>` の 1 つにまとまっており、
+  ログストリームが `spans` (トレース スパン。unified span destination を設定した場合) と
+  `runtime-logs` (stdout/stderr) に分かれている。unified span destination を設定していない
+  場合、スパンは共有の `aws/spans` ログ グループに出力される。ログストリームを絞り込む必要が
+  ある場合は、クエリ内で `@logStream` を使う。`runtime-logs` にセッション ID 相当の
+  サフィックスが付くかどうかは公式ドキュメントで確認できていないため、完全一致ではなく
+  `@logStream like /^runtime-logs/` のような前方一致で絞り込む。
 - 対象期間 (start_time, end_time。epoch seconds または「直近 N 分」)。指定がなければ既定 60 分をユーザーに提示し、合意を得る。
 - 調査目的。エラー調査 / レイテンシ調査 / 両方のいずれかを確定する。
 - 分かっている場合は session_id または trace_id。
