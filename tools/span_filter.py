@@ -154,6 +154,25 @@ def match_drop(record: dict[str, Any], *, seen_schema_urls: set[str] | None = No
     return None
 
 
+def _to_number(value: Any) -> float | None:
+    """value を数値として解釈できれば float を返し、できなければ None を返す。
+
+    CloudWatch Logs Insights はフィールド値を文字列で返すため、
+    durationNano などの数値フィールドも str で渡ってくることがある。
+    bool は int のサブクラスだが、duration の判定対象としては数値ではない。
+    """
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
 def match_keep(record: dict[str, Any], *, is_trace_boundary: bool = False) -> str | None:
     """record が KEEP パターンに一致する場合、そのパターン名 (KEEP_REASONS のキー) を返す。
 
@@ -170,8 +189,14 @@ def match_keep(record: dict[str, Any], *, is_trace_boundary: bool = False) -> st
     if any(keyword in text for keyword in _ERROR_KEYWORDS):
         return "error_like"
 
-    duration = record.get("duration") or record.get("duration_ms") or record.get("latency_ms")
-    if isinstance(duration, (int, float)) and not isinstance(duration, bool) and duration > 0:
+    duration_raw = (
+        record.get("durationNano")
+        or record.get("duration")
+        or record.get("duration_ms")
+        or record.get("latency_ms")
+    )
+    duration = _to_number(duration_raw)
+    if duration is not None and duration > 0:
         return "duration_positive"
 
     if any(key in record for key in ("tool_use", "toolUse", "function_call")):
