@@ -2,10 +2,14 @@
 
 Amazon Bedrock AgentCore Runtime のログ調査を題材に、Context Rot (入力トークン長が伸びるほど LLM の性能が不安定になる現象) を避けるためのマルチエージェント設計を、Kiro のワークフロー型 Skill として実装したサンプル リポジトリです。
 
-解説記事: [Context Rot を避けるマルチエージェント設計 — AWS のログ調査をマルチエージェントで実装する](https://zenn.dev/aws_japan/articles/multi-agent-design)
+解説記事: [ワークフロー型 Skill で実現するマルチエージェント設計](https://zenn.dev/aws_japan/articles/multi-agent-design)
 
 > [!NOTE]
 > 本リポジトリは検証環境での確認に基づくサンプルです。AWS の公式サンプルではありません。
+
+main agent はログの生データを読み込みません。ログの取得と絞り込みは Sub-agent の context で完結させ、main agent には Markdown の成果物のパスと件数だけを返します。
+
+![main agent と Sub-agent の context 分離](./docs/images/context-split.png)
 
 ## 実行例
 
@@ -78,6 +82,8 @@ agentcore deploy
 ## ワークフロー型 Skill の構成
 
 `kiro/` のワークフローは、次の 4 ステップで構成しています。
+
+![ワークフロー型 Skill の 4 ステップ](./docs/images/skill-steps.png)
 
 1. 調査目的の確認 (main agent)
 2. ログ取得と要約 (subagent)
