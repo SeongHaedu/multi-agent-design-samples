@@ -1,4 +1,4 @@
-# scripts/cleanup.py
+# reproduce/scripts/cleanup.py
 #
 # Deletes the resources scripts/deploy.py created: the AgentCore Runtime, the ECR
 # repository, and the IAM role, all named with RESOURCE_PREFIX.

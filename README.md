@@ -1,61 +1,67 @@
-English | [Japanese](README_JA.md)
+# multi-agent-design-samples
 
-# Multi-Agent Design Samples: AgentCore Runtime Log Investigation
+Amazon Bedrock AgentCore Runtime のログ調査を題材に、Context Rot (入力トークン
+長が伸びるほど LLM の性能が不安定になる現象) を避けるためのマルチエージェント
+設計を、3 つの coding agent (Kiro、Claude Code、Codex) それぞれのワークフロー型
+Skill として実装したサンプル リポジトリである。
+
+解説記事: (記事公開後に追記)
 
 > [!NOTE]
-> This repository is not provided by AWS. It is a sample accompanying a blog post, based on verification in one personal environment. My opinions are my own.
+> 本リポジトリは検証環境での確認に基づくサンプルである。AWS の公式サンプルでは
+> ない。
 
-Sample code for a workflow-style Agent Skill that investigates Amazon Bedrock AgentCore Runtime logs without flooding the main agent's context with raw log records. The skill delegates log retrieval, noise filtering, and summarization to a subagent; the subagent returns only a JSON summary and a file path, and the raw records never enter the main agent's context.
-
-Blog post (Japanese): (記事公開後に追記)
-
-## Structure
+## どこから始めるか
 
 ```
-.
-├── skills/
-│   └── agentcore-log-investigation/
-│       └── SKILL.md             Workflow-style Agent Skill. Pipeline Display, 4 steps
-│                                 (confirm objective / retrieve+summarize via subagent /
-│                                 present conclusion / review the conclusion via subagent),
-│                                 each with Constraints, Acceptance Criteria, and a
-│                                 fixed-format Checkpoint.
-├── tools/
-│   ├── logs_insights.py         CloudWatch Logs Insights query helper. Wraps StartQuery /
-│                                 GetQueryResults polling and summarizes the result into
-│                                 record_count / representative_records / field_value_counts.
-│                                 boto3 only.
-│   └── span_filter.py           DROP / KEEP noise filter for OTEL spans, following the
-│                                 patterns published in cloudwatch-mcp-server's
-│                                 agentcore-investigation skill. Standard library only.
-├── agent-failing/
-│   ├── main.py                  Sample agent that fails on purpose, so that there are logs
-│                                 worth investigating. FAILURE_MODE switches between a tool
-│                                 exception, a timeout, and an invalid-input error.
-│   ├── Dockerfile
-│   └── requirements.txt
-├── scripts/
-│   ├── deploy.py                Deploy agent-failing to AgentCore Runtime.
-│   └── cleanup.py               Delete the resources deploy.py created.
-├── requirements.txt              boto3 only
-└── .gitignore
+multi-agent-design-samples/
+├── README.md            このファイル
+├── requirements.txt      tools/ と reproduce/scripts/ が使う共通の依存 (boto3 のみ)
+├── tools/                 Logs Insights クエリ関数と OTEL スパンのノイズフィルタ (3 つの coding agent 共通)
+├── reproduce/             事象の再現。ログが大量に出る状況を作る
+├── kiro/                  Kiro 用のワークフロー型 Skill
+├── claude-code/           Claude Code (Amazon Bedrock 版) 用のワークフロー型 Skill
+└── codex/                 Codex CLI (OpenAI) 用のワークフロー型 Skill
 ```
 
-## Prerequisites
+読み進める順序は次のとおりである。
 
-- Python 3.10 or later.
-- AWS credentials with, at minimum, the following IAM permissions for `tools/logs_insights.py`:
+1. `reproduce/README.md` の手順で、意図的に失敗するエージェントを Amazon
+   Bedrock AgentCore Runtime にデプロイし、調査対象のログを蓄積させる。
+2. 使っている coding agent に応じて `kiro/README.md`、`claude-code/README.md`、
+   `codex/README.md` のいずれかを読み、そのディレクトリに移動してワークフロー型
+   Skill を実行する。
+
+`tools/` (Logs Insights クエリ関数と OTEL スパンのノイズフィルタ) は 3 つの
+coding agent ディレクトリすべてから `../tools/...` という相対パスで共有して
+参照する。同じロジックを 3 か所に複製すると、修正時に 3 か所を同期させる必要が
+生じるため、リポジトリ ルートの 1 か所に置いている。
+
+## 前提条件
+
+- Python 3.10 以上であること。
+- `tools/logs_insights.py` を使うには、最低限次の IAM 権限を持つ AWS 認証情報が
+  必要である。
   - `logs:StartQuery`
   - `logs:GetQueryResults`
   - `logs:StopQuery`
   - `logs:DescribeLogGroups`
-- `scripts/deploy.py` and `scripts/cleanup.py` create and delete more than log queries: an AgentCore Runtime, an ECR repository, and an IAM role. Running them needs additional permissions for `bedrock-agentcore-control` (`CreateAgentRuntime`, `DeleteAgentRuntime`, `ListAgentRuntimes`, `GetAgentRuntime`), `ecr` (`CreateRepository`, `DeleteRepository`, `DescribeRepositories`), and `iam` (`CreateRole`, `DeleteRole`, `PutRolePolicy`, `DeleteRolePolicy`, `GetRole`, `ListRoleTags`). This repository does not run those scripts itself, so start from the four log permissions above and add the rest only when you actually deploy.
-- Docker with `docker buildx` if you build the `agent-failing` container image yourself. AgentCore Runtime microVMs run ARM64 Linux.
-
-## Setup
+- `reproduce/scripts/deploy.py` と `reproduce/scripts/cleanup.py` は、ログ
+  クエリより広い操作を行う。AgentCore Runtime、ECR リポジトリ、IAM ロールの
+  作成と削除である。実行するには、`bedrock-agentcore-control`
+  (`CreateAgentRuntime`、`DeleteAgentRuntime`、`ListAgentRuntimes`、
+  `GetAgentRuntime`)、`ecr` (`CreateRepository`、`DeleteRepository`、
+  `DescribeRepositories`)、`iam` (`CreateRole`、`DeleteRole`、
+  `PutRolePolicy`、`DeleteRolePolicy`、`GetRole`、`ListRoleTags`) の追加権限が
+  必要である。
+- `reproduce/agent-failing` のコンテナ イメージを自分でビルドする場合は、
+  `docker buildx` を含む Docker が必要である。AgentCore Runtime の microVM は
+  ARM64 Linux で動作する。
+- 使用する coding agent (Kiro、Claude Code、Codex) がインストールされている
+  こと。各ディレクトリの README.md に前提条件を記載している。
 
 ```bash
-git clone https://github.com/SeongHaedu/multi-agent-design-samples.git
+git clone <このリポジトリのクローン URL>
 cd multi-agent-design-samples
 
 python3 -m venv .venv
@@ -63,85 +69,65 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Run every command below from the repository root.
+## reproduce/ が AWS リソースを作成すること
 
-## Using the skill
-
-`skills/agentcore-log-investigation/SKILL.md` is a Claude Code Agent Skill. Copy the
-`skills/agentcore-log-investigation/` directory into a project that has Claude Code's skill
-discovery enabled (for example, a `.claude/skills/` directory), and invoke it by describing
-the investigation you want, such as "an agent on AgentCore Runtime is failing, investigate
-why." The skill walks through 4 steps: confirming the objective, delegating retrieval and
-summarization to a subagent, presenting a conclusion, and having a separate reviewer
-subagent check that the conclusion is grounded only in the saved summary and not on anything
-the main agent guessed. It pauses at a Checkpoint after each step for your approval, and the
-review step can send you back to revise the conclusion.
-
-Behind the scenes, the subagent step calls `tools/logs_insights.py`'s
-`run_logs_insights_query()` to run a CloudWatch Logs Insights query and summarize the result,
-and, for OTEL spans, `tools/span_filter.py`'s `filter_spans()` to drop noise before
-summarizing. You can also call either module directly:
-
-```bash
-python tools/logs_insights.py \
-  --log-group /aws/bedrock-agentcore/runtimes/<agent-id>-DEFAULT \
-  --query 'fields @timestamp, @message | filter @message like /ERROR/' \
-  --minutes 60 \
-  --limit 50
-```
-
-This prints a JSON summary (`record_count`, `representative_records`, `field_value_counts`)
-to stdout; it never prints the full set of matching log records.
-
-## Trying the failing agent
-
-`agent-failing/main.py` is a minimal agent built on the `bedrock-agentcore` SDK. It emits a
-configurable number of near-identical INFO log lines (`NORMAL_LOG_LINES`, default 200) and
-then, depending on `FAILURE_MODE`, either raises inside a simulated tool call
-(`tool_exception`, the default), sleeps past a caller's timeout (`timeout`), or rejects a
-payload missing `customer_id` (`invalid_input`). Set `FAILURE_MODE=none` to only emit the
-normal logs.
-
-```bash
-docker buildx build --platform linux/arm64 \
-  -t <account-id>.dkr.ecr.<region>.amazonaws.com/multi-agent-design-agent-failing:latest \
-  --push agent-failing/
-
-AGENTCORE_CONTAINER_URI=<account-id>.dkr.ecr.<region>.amazonaws.com/multi-agent-design-agent-failing:latest \
-  python scripts/deploy.py
-```
-
-`scripts/deploy.py` prefixes every resource it creates (the IAM role, the ECR repository, the
-AgentCore Runtime) with `RESOURCE_PREFIX` (default `multi-agent-design-`), and prints the
-target Region and the account id (with everything but the last 4 digits masked) before making
-any AWS call. It creates the ECR repository and the IAM role if they do not already exist, and
-writes the created runtime's id and ARN to `results/deploy.json`.
-
-## Cleanup
+`reproduce/scripts/deploy.py` は、AgentCore Runtime、ECR リポジトリ、IAM
+ロールを実際に作成する。検証が終わったら、`reproduce/scripts/cleanup.py` で
+必ず削除すること。
 
 > [!WARNING]
-> `scripts/cleanup.py` deletes real AWS resources: the AgentCore Runtime, the ECR repository,
-> and the IAM role that `scripts/deploy.py` created. Two safeguards apply together, and both
-> are required.
+> `reproduce/scripts/cleanup.py` は実際の AWS リソースを削除する。次の 2 つの
+> 安全対策は両方が必須であり、片方だけでは不十分である。
 >
-> - Prefix guard: only resources whose name starts with `RESOURCE_PREFIX` are touched. An
->   empty prefix is refused before any AWS call, because `"".startswith("")` is always true
->   and would otherwise match every resource in the account and Region.
-> - Confirmation flag: without `--yes`, the script only prints what it would delete and exits.
->   Nothing is deleted unless `--yes` is passed explicitly.
+> - プレフィックス限定: 名前が `RESOURCE_PREFIX` (既定 `multi-agent-design-`)
+>   で始まるリソースだけを対象にする。空プレフィックスは AWS 呼び出しの前に
+>   拒否する。
+> - 明示的な確認フラグ: `--yes` を渡さない限り、削除対象の一覧を表示するだけで
+>   終了する。
 
 ```bash
-python scripts/cleanup.py        # list the targets only
-python scripts/cleanup.py --yes  # actually delete them
+cd reproduce
+python scripts/cleanup.py        # 削除対象の一覧表示のみ
+python scripts/cleanup.py --yes  # 実際に削除する
 ```
 
-## References
+詳細は `reproduce/README.md` を参照する。
+
+## ディレクトリの役割
+
+| ディレクトリ | 役割 |
+|---|---|
+| `tools/` | Logs Insights クエリ関数 (`logs_insights.py`)、OTEL スパンの DROP / KEEP ノイズフィルタ (`span_filter.py`)。3 つの coding agent ディレクトリすべてから共有する |
+| `reproduce/` | 意図的に失敗するエージェントを AgentCore Runtime にデプロイし、調査対象のログを再現する。デプロイとクリーンアップのスクリプトを含む |
+| `kiro/` | Kiro でワークフロー型 Skill を実行する構成 |
+| `claude-code/` | Claude Code (Amazon Bedrock 版) でワークフロー型 Skill を実行する構成 |
+| `codex/` | Codex CLI (OpenAI) でワークフロー型 Skill を実行する構成 |
+
+## ワークフロー型 Skill の構成
+
+3 つの coding agent ディレクトリはいずれも、同じ 4 ステップのワークフローを
+実装している。
+
+1. 調査目的の確認 (main agent)
+2. ログ取得と要約 (subagent)
+3. 結論の提示 (main agent)
+4. 結論のレビュー (subagent)
+
+Step 2 はエラー調査とレイテンシ調査を別の subagent に分けている。1 つの
+subagent に両方を任せると、先に見つけたエラーの内容が後の探索方針を引きずる
+ためである。Step 4 は、Step 3 の結論が保存済みの要約ファイルの内容だけを
+根拠にしているか、main agent が推測で補った情報を含んでいないかを、別の
+subagent に検証させる。問題が見つかった場合は Step 3 に戻って結論を修正する。
+
+各 coding agent での実装形式・配置場所は、その coding agent の公開ドキュメント
+で確認できる範囲に従っている。確認できなかった項目は、各ディレクトリの
+README.md に明記している。
+
+## 参考
 
 - [Context Rot: How Increasing Input Tokens Impacts LLM Performance](https://research.trychroma.com/context-rot)
 - [agentcore-investigation SKILL.md](https://github.com/awslabs/mcp/blob/main/src/cloudwatch-mcp-server/skills/agentcore-investigation/SKILL.md)
 - [otel-span-schema.md](https://github.com/awslabs/mcp/blob/main/src/cloudwatch-mcp-server/skills/agentcore-investigation/references/otel-span-schema.md)
-- [Claude Code Subagents](https://code.claude.com/docs/en/sub-agents)
-- [Claude Code Agent Skills](https://code.claude.com/docs/en/skills)
 - [AgentCore Observability - Configure observability for your agents](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/observability-configure.html)
 - [GetQueryResults - Amazon CloudWatch Logs API Reference](https://docs.aws.amazon.com/AmazonCloudWatchLogs/latest/APIReference/API_GetQueryResults.html)
 - [awslabs/agentcore-samples - cloudwatch_client.py](https://github.com/awslabs/agentcore-samples/blob/main/06-workshops/07-AgentCore-evaluations/03-advanced/01-end-to-end-on-demand-with-boto3/utils/cloudwatch_client.py)

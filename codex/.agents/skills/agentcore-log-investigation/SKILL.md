@@ -11,7 +11,21 @@ description: >
   かを別の subagent にレビューさせる。
 ---
 
-# AgentCore Runtime ログ調査
+# AgentCore Runtime ログ調査 (Codex CLI 版)
+
+このディレクトリ (`codex/`) を作業ディレクトリにして `codex` を起動すると、
+Codex は現在のディレクトリから repo root まで `.agents/skills` を再帰的に
+探索してこのスキルを見つける。呼び出しは `$agentcore-log-investigation` の
+ように `$` メンションで明示するか、`description` に基づく暗黙のマッチングで
+行われる。
+
+利用する subagent は `.codex/agents/error-investigator.toml`、
+`latency-investigator.toml`、`reviewer.toml` の 3 つであり、`name` フィールド
+の値で指定して委譲する。
+
+`tools/logs_insights.py` と `tools/span_filter.py` はこのディレクトリの外
+(リポジトリ ルートの `tools/`) にある。`codex/` からの相対パスは
+`../tools/` である。
 
 ## Pipeline Display
 
@@ -61,68 +75,45 @@ main agent が対話し、以下を確定する。
 subagent に任せると、先に見つけたエラーの内容が後の探索方針を引きずるため、
 目的が独立しているなら subagent 自体を分ける。
 
-- 目的が error のみ: `error-investigator` の 1 subagent を起動する。
-- 目的が latency のみ: `latency-investigator` の 1 subagent を起動する。
-- 目的が both: 上記 2 つを並列に起動する。
+- 目的が error のみ: `error-investigator` を 1 回委譲する。
+- 目的が latency のみ: `latency-investigator` を 1 回委譲する。
+- 目的が both: 上記 2 つを委譲する。
 
 **Subagent (error-investigator):**
-- role: error-investigator
-- prompt: |
+- name: error-investigator
+- 渡す内容: |
     ```
     対象ロググループ: {{log_group}}
     対象期間 (epoch seconds): {{start}} 〜 {{end}}
     調査目的: エラーの原因調査
-
-    手順:
-    1. tools/logs_insights.py の run_logs_insights_query() を呼び出し、
-       ERROR レベルのログ、または error_type 属性を持つスパンを対象に
-       クエリを実行せよ。query_string には必ず | limit を含めること
-       (limit=50 を推奨)。
-    2. スパンを対象にした場合は、結果を tools/span_filter.py の
-       filter_spans() に渡し、kept_records だけを以後の要約対象にせよ。
-    3. record_count / representative_records / field_value_counts を
-       outputs/investigations/{{session_id}}/errors.json に JSON で保存せよ。
-    4. ログの生データを応答に含めてはならない。
-
-    #### 出力ルール (最優先)
-    保存後、以下の JSON のみを返すこと:
-    {"status": "completed", "saved_to": "<実際の保存先パス>", "record_count": <件数>}
-    失敗時: {"status": "failed", "reason": "<理由>"}
+    出力先: outputs/investigations/{{session_id}}/errors.json
     ```
 
 **Subagent (latency-investigator):**
-- role: latency-investigator
-- prompt: |
+- name: latency-investigator
+- 渡す内容: |
     ```
     対象ロググループ: {{log_group}}
     対象期間 (epoch seconds): {{start}} 〜 {{end}}
     調査目的: レイテンシの外れ値調査
-
-    手順:
-    1. tools/logs_insights.py の run_logs_insights_query() を呼び出し、
-       スパンから latency_ms (または duration) を対象にクエリを実行せよ。
-       query_string には必ず | limit を含めること (limit=20 を推奨)。
-    2. 結果を tools/span_filter.py の filter_spans() に渡し、
-       kept_records だけを以後の要約対象にせよ。
-    3. record_count / representative_records / field_value_counts を
-       outputs/investigations/{{session_id}}/latency.json に JSON で保存せよ。
-    4. ログの生データを応答に含めてはならない。
-
-    #### 出力ルール (最優先)
-    保存後、以下の JSON のみを返すこと:
-    {"status": "completed", "saved_to": "<実際の保存先パス>", "record_count": <件数>}
-    失敗時: {"status": "failed", "reason": "<理由>"}
+    出力先: outputs/investigations/{{session_id}}/latency.json
     ```
 
+各 subagent の詳細な手順 (`../tools/logs_insights.py` の呼び出し方、
+`| limit` の推奨値、`../tools/span_filter.py` によるノイズ除去、返す JSON の
+形式) は `.codex/agents/error-investigator.toml` と
+`.codex/agents/latency-investigator.toml` の `developer_instructions` に
+定義済みであり、ここでは対象・期間・出力先だけを渡す。
+
 **Constraints:**
-- MUST: subagent には調査目的・対象期間・出力先パスだけを渡すこと。ログの断片や過去の調査結果を prompt に含めないこと。
+- MUST: subagent には調査目的・対象期間・出力先パスだけを渡すこと。ログの断片や過去の調査結果を渡す内容に含めないこと。
 - MUST: エラー調査とレイテンシ調査は別の subagent に分けること。1 つの subagent に両方を任せないこと。
 - MUST: subagent が返した JSON をそのまま信用せず、下記 Acceptance Criteria で検証すること。
 - MUST_NOT: ログの生レコードを main agent の応答や context に含めないこと。
 
 **Acceptance Criteria:**
 - subagent が `status: completed` の JSON を返している。
-- `saved_to` に書かれたパスに、main agent がファイル読み込みツールで確認した結果、ファイルが実在する。
+- `saved_to` に書かれたパスに、main agent がファイル読み込みで確認した結果、ファイルが実在する。
 - 保存された JSON に `record_count` と `representative_records` が含まれている。
 - `representative_records` の各要素に `@timestamp` と `@message` が含まれている。
 - 上記のいずれかを満たさない場合、そのステップは失敗として扱い、下記 Checkpoint で (r)etry を選べるようにする。
@@ -143,11 +134,11 @@ subagent に任せると、先に見つけたエラーの内容が後の探索�
 ## Step 3: 結論の提示
 
 main agent は、Step 2 で subagent が返した `saved_to` のパスだけをファイル
-読み込みツールで読み込み、`record_count` / `representative_records` /
+読み込みで読み込み、`record_count` / `representative_records` /
 `field_value_counts` を確認して結論を提示する。
 
 **Constraints:**
-- MUST: 保存された JSON ファイルをファイル読み込みツールで読み込んで確認すること。subagent の応答テキストの記述だけを信用しないこと。
+- MUST: 保存された JSON ファイルを読み込んで確認すること。subagent の応答テキストの記述だけを信用しないこと。
 - MUST: 結論には根拠 (representative_records の該当箇所、field_value_counts の集計値、saved_to のファイル パス) を付記すること。
 - MUST_NOT: Step 2 で保存した要約以外の新しいログ取得を、この Step で行わないこと。追加取得が必要な場合は Step 1 に戻る。
 
@@ -168,7 +159,7 @@ main agent は、Step 2 で subagent が返した `saved_to` のパスだけを�
 
 ## Step 4: 結論のレビュー (subagent)
 
-main agent は、Step 3 で提示した結論を検証するため、reviewer subagent を起動する。
+main agent は、Step 3 で提示した結論を検証するため、`reviewer` を委譲する。
 reviewer に渡すのは、Step 3 の結論文と、その根拠となったファイルのパス
 (Step 2 で保存した `errors.json` や `latency.json`) だけである。reviewer は、
 結論文の各主張が `record_count` / `representative_records` / `field_value_counts`
@@ -176,8 +167,8 @@ reviewer に渡すのは、Step 3 の結論文と、その根拠となったフ�
 いない情報を推測で補っていないかを確認する。
 
 **Subagent (reviewer):**
-- role: reviewer
-- prompt: |
+- name: reviewer
+- 渡す内容: |
     ```
     以下の結論文が、指定したファイルの内容だけを根拠にしているかを検証せよ。
 
@@ -186,24 +177,11 @@ reviewer に渡すのは、Step 3 の結論文と、その根拠となったフ�
 
     根拠ファイル:
     {{summary_json_paths}}
-
-    手順:
-    1. 上記の根拠ファイルをファイル読み込みツールで読み込め。
-    2. 結論文の各主張について、record_count / representative_records /
-       field_value_counts のいずれかに対応する記載があるかを確認せよ。
-    3. 対応する記載が見つからない主張は、main agent が context に持っていない
-       情報を推測で補ったものとみなし、issues に記録せよ。
-    4. ファイルの書き込みは行ってはならない。読み込みだけを行うこと。
-
-    #### 出力ルール (最優先)
-    以下の JSON のみを返すこと:
-    {"status": "completed", "verdict": "pass または fail", "issues": ["<根拠が見つからない主張の説明>", ...]}
-    失敗時: {"status": "failed", "reason": "<理由>"}
     ```
 
 **Constraints:**
 - MUST: reviewer には結論文と根拠ファイルのパスだけを渡すこと。ログの生データを新たに渡さないこと。
-- MUST_NOT: reviewer にファイルの書き込みを行わせないこと。検証結果は JSON の返り値だけで受け取ること。
+- MUST_NOT: reviewer にファイルの書き込みを行わせないこと。`.codex/agents/reviewer.toml` の `developer_instructions` に明記した MUST_NOT に依拠する (Codex の Subagent TOML には利用ツールを制限する公開ドキュメント上のフィールドが確認できなかったため、構造的な強制ではない)。
 - MUST: reviewer が返した JSON をそのまま信用せず、下記 Acceptance Criteria で検証すること。
 
 **Acceptance Criteria:**

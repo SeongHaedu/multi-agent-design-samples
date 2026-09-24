@@ -1,4 +1,4 @@
-# scripts/deploy.py
+# reproduce/scripts/deploy.py
 #
 # Deploys agent-failing/ to Amazon Bedrock AgentCore Runtime as a container agent.
 #
