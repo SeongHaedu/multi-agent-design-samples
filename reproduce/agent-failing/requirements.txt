@@ -1,3 +1,0 @@
-# bedrock-agentcore SDK. Version left as a range rather than pinned; this sample only needs
-# BedrockAgentCoreApp / app.entrypoint, which has been stable across recent releases.
-bedrock-agentcore>=0.1.0,<1.0.0

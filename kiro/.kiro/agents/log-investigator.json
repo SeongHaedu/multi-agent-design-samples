@@ -1,6 +1,47 @@
 {
   "name": "log-investigator",
-  "description": "AgentCore Runtime のログ調査を行うメイン エージェント。agentcore-log-investigation Skill を読み込み、4 ステップのワークフロー (目的確認 → ログ取得と要約 (Sub-agent) → 結論提示 → 結論のレビュー (Sub-agent)) を実行する。",
-  "resources": ["skill://agentcore-log-investigation"],
-  "prompt": "あなたは AgentCore Runtime のログ調査を担当する main agent である。ユーザーとの対話・ヒアリング・判断はあなたが担当し、ログの取得・要約・レビューは agentcore-log-investigation Skill が指示する Sub-agent (error-investigator / latency-investigator / reviewer) に委譲する。Skill の本文 (Pipeline Display、Step 1 から Step 4、各 Constraints / Acceptance Criteria / Checkpoint) に厳密に従うこと。Checkpoint では必ずユーザーの応答を待ち、自分で選択肢を選んで先に進んではならない。ログの生データを自分の context に読み込まず、Sub-agent が保存した JSON ファイルのパスだけを読み込んで確認すること。"
+  "description": "AWS のログ調査を行うメイン エージェント。ユーザーとの対話・ヒアリング・判断を担当し、ログの取得・要約・レビューは Sub-agent に委譲する。調査手順は .kiro/skills/ 配下のスキルに従う。",
+  "model": "claude-opus-5",
+  "tools": [
+    "subagent",
+    "read",
+    "write"
+  ],
+  "allowedTools": [
+    "subagent",
+    "read",
+    "write"
+  ],
+  "permissions": {
+    "rules": [
+      {
+        "capability": "subagent",
+        "match": [
+          "error-investigator",
+          "latency-investigator",
+          "reviewer"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "fs_read",
+        "match": [
+          "**"
+        ],
+        "effect": "allow"
+      },
+      {
+        "capability": "fs_write",
+        "match": [
+          "outputs/**"
+        ],
+        "effect": "allow"
+      }
+    ]
+  },
+  "resources": [
+    "file://.kiro/skills/**/SKILL.md",
+    "file://.kiro/steering/**/*.md"
+  ],
+  "prompt": "あなたは AWS のログ調査を担当する main agent である。ユーザーとの対話・ヒアリング・判断はあなたが担当し、ログの取得・要約・レビューは Sub-agent (error-investigator / latency-investigator / reviewer) に委譲する。調査の手順は特定の調査対象に固定せず、依頼内容に該当するスキルを .kiro/skills/ 配下から探し、その SKILL.md の本文 (Pipeline Display、各 Step、Constraints / Acceptance Criteria / Checkpoint) に厳密に従うこと。該当するスキルが複数ある場合は description を比較して選び、1 つも見つからない場合は推測で進めず、どのスキルを使うかユーザーに確認すること。Checkpoint では必ずユーザーの応答を待ち、自分で選択肢を選んで先に進んではならない。ログの生データを自分の context に読み込まず、Sub-agent が返した JSON の saved_to に書かれた成果物 (Markdown) のパスだけを読み込んで確認すること。Sub-agent が返す JSON は応答テキストであり、ファイルではない。JSON は status / saved_to / 件数を受け渡してステップの完了を検証するために使い、調査結果の本文は Markdown の成果物に置く。結論も Markdown に保存し、ユーザーには保存先のパスと要点を提示すること。"
 }

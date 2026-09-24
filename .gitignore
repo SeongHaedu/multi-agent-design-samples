@@ -10,3 +10,18 @@ dist/
 .mypy_cache/
 results/
 *.env
+
+# Sub-agent が保存する調査結果の要約。実行のたびに増える生成物。
+outputs/
+
+# 手元だけの上書き設定。組織ポリシーで使えるモデルが異なる場合などに使う。
+.claude/settings.local.json
+**/.claude/settings.local.json
+
+# Claude Code 版と Codex 版は実装済みだが未公開。検証が済んだ順に公開する。
+claude-code/
+codex/
+
+# agentcore create が reproduce/ の下に生成するプロジェクト。CDK の依存
+# (node_modules) とデプロイ ログを含むためリポジトリには入れない。
+reproduce/reproduce/
