@@ -7,7 +7,8 @@ description: >
   知りたい」のように、AgentCore Runtime のログ グループを対象にした調査を依頼した
   場合に使う。main agent の context にログの生データを読み込まず、subagent へ
   取得・絞り込み・要約を委譲し、main agent には JSON の要約とファイル パスだけを
-  返させる。
+  返させる。結論の提示後は、その結論が根拠となるファイルの内容だけに基づいている
+  かを別の subagent にレビューさせる。
 ---
 
 # AgentCore Runtime ログ調査
@@ -16,7 +17,7 @@ description: >
 
 ▶ Executing agentcore-log-investigation
 
-Pipeline: 🎯 目的確認 → 🔎 ログ取得と要約 (subagent) → 📝 結論提示
+Pipeline: 🎯 目的確認 → 🔎 ログ取得と要約 (subagent) → 📝 結論提示 → ✅ レビュー (subagent)
 
 subagent が担うステップには `(subagent)` と明記する。ユーザーは、そのステップの
 間は main agent の context に何も残っていないことを理解した上で待てる。
@@ -157,11 +158,68 @@ main agent は、Step 2 で subagent が返した `saved_to` のパスだけを�
 **Checkpoint:**
 ```
 ✅ Step 3: 結論提示完了
-↪️ (c)ontinue: 追加調査 (別の時間範囲やセッション) に進む
-↪️ (f)inish: 終了
+↪️ (c)ontinue: レビューへ進む
+↪️ (a)bort: 中止
 ```
 
 **Constraints:**
 - MUST: ユーザーの応答を待つこと。
-- MUST: (c)/(f) 以外の入力を受け取った場合は同じ Checkpoint を再表示すること。
-- (c) が選ばれた場合は Step 1 に戻る。
+- MUST: (c)/(a) 以外の入力を受け取った場合は同じ Checkpoint を再表示すること。
+
+## Step 4: 結論のレビュー (subagent)
+
+main agent は、Step 3 で提示した結論を検証するため、reviewer subagent を起動する。
+reviewer に渡すのは、Step 3 の結論文と、その根拠となったファイルのパス
+(Step 2 で保存した `errors.json` や `latency.json`) だけである。reviewer は、
+結論文の各主張が `record_count` / `representative_records` / `field_value_counts`
+のいずれかに対応する記載を持つかどうかを検証し、main agent が context に持って
+いない情報を推測で補っていないかを確認する。
+
+**Subagent (reviewer):**
+- role: reviewer
+- prompt: |
+    ```
+    以下の結論文が、指定したファイルの内容だけを根拠にしているかを検証せよ。
+
+    結論文:
+    {{conclusion_text}}
+
+    根拠ファイル:
+    {{summary_json_paths}}
+
+    手順:
+    1. 上記の根拠ファイルをファイル読み込みツールで読み込め。
+    2. 結論文の各主張について、record_count / representative_records /
+       field_value_counts のいずれかに対応する記載があるかを確認せよ。
+    3. 対応する記載が見つからない主張は、main agent が context に持っていない
+       情報を推測で補ったものとみなし、issues に記録せよ。
+    4. ファイルの書き込みは行ってはならない。読み込みだけを行うこと。
+
+    #### 出力ルール (最優先)
+    以下の JSON のみを返すこと:
+    {"status": "completed", "verdict": "pass または fail", "issues": ["<根拠が見つからない主張の説明>", ...]}
+    失敗時: {"status": "failed", "reason": "<理由>"}
+    ```
+
+**Constraints:**
+- MUST: reviewer には結論文と根拠ファイルのパスだけを渡すこと。ログの生データを新たに渡さないこと。
+- MUST_NOT: reviewer にファイルの書き込みを行わせないこと。検証結果は JSON の返り値だけで受け取ること。
+- MUST: reviewer が返した JSON をそのまま信用せず、下記 Acceptance Criteria で検証すること。
+
+**Acceptance Criteria:**
+- subagent が `status: completed` の JSON を返している。
+- `verdict` が `pass` または `fail` のいずれかである。
+- `verdict` が `fail` の場合、`issues` に 1 件以上の説明が含まれている。
+
+**Checkpoint:**
+```
+✅ Step 4: レビュー完了 — verdict: {{verdict}}
+↪️ (c)ontinue: 終了
+↪️ (r)evise: Step 3 に戻り結論を修正する
+↪️ (a)bort: 中止
+```
+
+**Constraints:**
+- MUST: ユーザーの応答を待つこと。Checkpoint を表示した直後に自分で (c) を選んで先へ進んではならない。
+- MUST: (c)/(r)/(a) 以外の入力を受け取った場合は同じ Checkpoint を再表示すること。
+- (r) が選ばれた場合は Step 3 に戻り、`issues` の内容を踏まえて結論を修正する。

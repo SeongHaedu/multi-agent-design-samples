@@ -16,9 +16,10 @@ main agent の context をログの生レコードで溢れさせずに、Amazon
 ├── skills/
 │   └── agentcore-log-investigation/
 │       └── SKILL.md             ワークフロー型 Agent Skill。Pipeline Display と
-│                                 3 ステップ (目的確認 / subagent によるログ取得と要約 /
-│                                 結論提示) で構成し、各ステップに Constraints、
-│                                 Acceptance Criteria、固定書式の Checkpoint を持つ。
+│                                 4 ステップ (目的確認 / subagent によるログ取得と要約 /
+│                                 結論提示 / subagent による結論のレビュー) で構成し、
+│                                 各ステップに Constraints、Acceptance Criteria、
+│                                 固定書式の Checkpoint を持つ。
 ├── tools/
 │   ├── logs_insights.py         CloudWatch Logs Insights クエリ関数。StartQuery /
 │                                 GetQueryResults のポーリングをラップし、結果を
@@ -67,7 +68,7 @@ pip install -r requirements.txt
 
 ## Skill の使い方
 
-`skills/agentcore-log-investigation/SKILL.md` は Claude Code の Agent Skill である。Claude Code の Skill 検出が有効なプロジェクト (例えば `.claude/skills/` ディレクトリを持つプロジェクト) に `skills/agentcore-log-investigation/` ディレクトリをコピーし、「AgentCore Runtime 上のエージェントが失敗している、原因を調べてほしい」のように調査内容を伝えることで呼び出せる。この Skill は、目的確認、subagent へのログ取得・要約の委譲、結論提示という 3 ステップで進み、各ステップの後に Checkpoint で一度停止し、ユーザーの承認を待つ。
+`skills/agentcore-log-investigation/SKILL.md` は Claude Code の Agent Skill である。Claude Code の Skill 検出が有効なプロジェクト (例えば `.claude/skills/` ディレクトリを持つプロジェクト) に `skills/agentcore-log-investigation/` ディレクトリをコピーし、「AgentCore Runtime 上のエージェントが失敗している、原因を調べてほしい」のように調査内容を伝えることで呼び出せる。この Skill は、目的確認、subagent へのログ取得・要約の委譲、結論提示、別の reviewer subagent による結論レビューという 4 ステップで進む。レビューでは、結論が保存済みの要約だけを根拠にしており、main agent が推測で補った情報を含んでいないかを検証する。各ステップの後には Checkpoint で一度停止し、ユーザーの承認を待つ。レビューで問題が見つかった場合は、結論提示のステップに戻って修正できる。
 
 内部では、subagent のステップで `tools/logs_insights.py` の `run_logs_insights_query()` を呼び、CloudWatch Logs Insights クエリを実行して結果を要約する。OTEL スパンを対象にする場合は、要約の前に `tools/span_filter.py` の `filter_spans()` でノイズを除く。いずれのモジュールも直接呼び出せる。
 

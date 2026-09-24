@@ -15,10 +15,11 @@ Blog post (Japanese): (記事公開後に追記)
 .
 ├── skills/
 │   └── agentcore-log-investigation/
-│       └── SKILL.md             Workflow-style Agent Skill. Pipeline Display, 3 steps
+│       └── SKILL.md             Workflow-style Agent Skill. Pipeline Display, 4 steps
 │                                 (confirm objective / retrieve+summarize via subagent /
-│                                 present conclusion), each with Constraints, Acceptance
-│                                 Criteria, and a fixed-format Checkpoint.
+│                                 present conclusion / review the conclusion via subagent),
+│                                 each with Constraints, Acceptance Criteria, and a
+│                                 fixed-format Checkpoint.
 ├── tools/
 │   ├── logs_insights.py         CloudWatch Logs Insights query helper. Wraps StartQuery /
 │                                 GetQueryResults polling and summarizes the result into
@@ -70,9 +71,11 @@ Run every command below from the repository root.
 `skills/agentcore-log-investigation/` directory into a project that has Claude Code's skill
 discovery enabled (for example, a `.claude/skills/` directory), and invoke it by describing
 the investigation you want, such as "an agent on AgentCore Runtime is failing, investigate
-why." The skill walks through 3 steps, confirming the objective, delegating retrieval and
-summarization to a subagent, and presenting a conclusion, pausing at a Checkpoint after each
-step for your approval.
+why." The skill walks through 4 steps: confirming the objective, delegating retrieval and
+summarization to a subagent, presenting a conclusion, and having a separate reviewer
+subagent check that the conclusion is grounded only in the saved summary and not on anything
+the main agent guessed. It pauses at a Checkpoint after each step for your approval, and the
+review step can send you back to revise the conclusion.
 
 Behind the scenes, the subagent step calls `tools/logs_insights.py`'s
 `run_logs_insights_query()` to run a CloudWatch Logs Insights query and summarize the result,
