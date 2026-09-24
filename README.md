@@ -2,7 +2,7 @@
 
 Amazon Bedrock AgentCore Runtime のログ調査を題材に、Context Rot (入力トークン長が伸びるほど LLM の性能が不安定になる現象) を避けるためのマルチエージェント設計を、Kiro のワークフロー型 Skill として実装したサンプル リポジトリです。
 
-解説記事: (記事公開後に追記)
+解説記事: [Context Rot を避けるマルチエージェント設計 — AWS のログ調査をマルチエージェントで実装する](https://zenn.dev/aws_japan/articles/multi-agent-design)
 
 > [!NOTE]
 > 本リポジトリは検証環境での確認に基づくサンプルです。AWS の公式サンプルではありません。
