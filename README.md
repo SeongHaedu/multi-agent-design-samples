@@ -15,6 +15,8 @@ main agent はログの生データを読み込みません。ログの取得と
 
 Kiro で 4 ステップのワークフロー (目的確認 → ログ取得と要約 (Sub-agent) → 結論提示 → 結論のレビュー (Sub-agent)) を実行する様子です。1000 行の正常系ログに埋もれた 1 行を真因として特定するまでを収めています。
 
+実行例では、context が独立した複数の subagent にログ調査を依頼しているため、main agent の context の使用率は調査開始前 (1%) から終了後 (4%) まで 3% のみの増加に留まる結果でした。main agent の context は常にクリーンに保たれている様子が伺えます。
+
 https://github.com/user-attachments/assets/89875720-4c7f-4031-b526-3eda2be3712a
 
 ## どこから始めるか
