@@ -1,6 +1,6 @@
 # Multi-Agent Design Samples
 
-Amazon Bedrock AgentCore Runtime のログ調査を題材に、Context Rot (入力トークン長が伸びるほど LLM の性能が不安定になる現象) を避けるためのマルチエージェント設計を、coding agent のワークフロー型 Skill として実装したサンプル リポジトリです。現在公開しているのは Kiro 版です。Claude Code 版と Codex 版は準備中です。
+Amazon Bedrock AgentCore Runtime のログ調査を題材に、Context Rot (入力トークン長が伸びるほど LLM の性能が不安定になる現象) を避けるためのマルチエージェント設計を、Kiro のワークフロー型 Skill として実装したサンプル リポジトリです。
 
 解説記事: (記事公開後に追記)
 
@@ -24,14 +24,12 @@ multi-agent-design-samples/
 └── kiro/                  Kiro 用のワークフロー型 Skill
 ```
 
-Claude Code 版 (Agent Skills と Subagents) と Codex 版 (AGENTS.md と subagent) も同じ 4 ステップのワークフローで実装していますが、動作確認が済んでいないためまだ公開していません。
-
 読み進める順序は次のとおりです。
 
 1. `reproduce/README.md` の手順で、意図的に失敗するエージェントを Amazon Bedrock AgentCore Runtime にデプロイし、調査対象のログを蓄積させます。
 2. `kiro/README.md` を読み、`kiro/` に移動してワークフロー型 Skill を実行します。
 
-`tools/` (Logs Insights クエリ関数と OTEL スパンのノイズフィルタ) は coding agent のディレクトリから `../tools/...` という相対パスで参照します。coding agent ごとに同じロジックを複製すると、修正時にすべてを同期させる必要が生じるため、リポジトリ ルートの 1 か所に置いています。
+`tools/` (Logs Insights クエリ関数と OTEL スパンのノイズフィルタ) は `kiro/` から `../tools/...` という相対パスで参照します。Skill のディレクトリごとに同じロジックを複製すると、修正時にすべてを同期させる必要が生じるため、リポジトリ ルートの 1 か所に置いています。
 
 ## 前提条件
 
@@ -73,13 +71,13 @@ agentcore deploy
 
 | ディレクトリ | 役割 |
 |---|---|
-| `tools/` | Logs Insights クエリ関数 (`logs_insights.py`)、OTEL スパンの DROP / KEEP ノイズフィルタ (`span_filter.py`)。coding agent のディレクトリから共有して参照する |
+| `tools/` | Logs Insights クエリ関数 (`logs_insights.py`)、OTEL スパンの DROP / KEEP ノイズフィルタ (`span_filter.py`)。`kiro/` から共有して参照する |
 | `reproduce/` | 意図的に失敗するエージェントを AgentCore CLI で AgentCore Runtime にデプロイし、調査対象のログを再現する。エージェントのコードは README に掲載している |
 | `kiro/` | Kiro でワークフロー型 Skill を実行する構成 |
 
 ## ワークフロー型 Skill の構成
 
-coding agent ごとのディレクトリは、いずれも同じ 4 ステップのワークフローを実装しています。
+`kiro/` のワークフローは、次の 4 ステップで構成しています。
 
 1. 調査目的の確認 (main agent)
 2. ログ取得と要約 (subagent)
@@ -88,7 +86,7 @@ coding agent ごとのディレクトリは、いずれも同じ 4 ステップ�
 
 Step 2 はエラー調査とレイテンシ調査を別の subagent に分けています。1 つの subagent に両方を任せると、先に見つけたエラーの内容が後の探索方針を引きずるためです。Step 4 は、Step 3 の結論が保存済みの要約ファイルの内容だけを根拠にしているか、main agent が推測で補った情報を含んでいないかを、別の subagent に検証させます。問題が見つかった場合は Step 3 に戻って結論を修正します。
 
-各 coding agent での実装形式・配置場所は、その coding agent の公開ドキュメントで確認できる範囲に従っています。確認できなかった項目は、各ディレクトリの README.md に明記しています。
+Skill と Sub-agent の実装形式・配置場所は、Kiro の公開ドキュメントで確認できる範囲に従っています。確認できなかった項目は `kiro/README.md` に明記しています。
 
 ## 参考
 

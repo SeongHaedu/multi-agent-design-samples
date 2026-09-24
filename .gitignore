@@ -18,7 +18,7 @@ outputs/
 .claude/settings.local.json
 **/.claude/settings.local.json
 
-# Claude Code 版と Codex 版は実装済みだが未公開。検証が済んだ順に公開する。
+# このリポジトリで公開するのは Kiro 版のみ。手元の作業ディレクトリは追跡しない。
 claude-code/
 codex/
 

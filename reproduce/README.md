@@ -100,9 +100,8 @@ cd reproduce   # リポジトリ ルートから見ると reproduce/reproduce/ �
 # app/agent_failing/main.py
 #
 # Amazon Bedrock AgentCore Runtime 上で動き、意図的に失敗するサンプル エージェント。
-# 目的は、coding agent ディレクトリ (kiro/ など) の
-# agentcore-log-investigation Skill が調査する対象のログを CloudWatch Logs に
-# 発生させることである。
+# 目的は、kiro/ の agentcore-log-investigation Skill が調査する対象のログを
+# CloudWatch Logs に発生させることである。
 #
 # FAILURE_MODE で失敗の種類を切り替える。
 #   tool_exception : ツール呼び出しが例外を投げる (既定)
